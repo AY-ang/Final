@@ -1,0 +1,222 @@
+---
+title: "ADA Final Project"
+author: "AYang"
+date: "4/19/2021"
+output: html_document
+---
+
+
+```{r}
+pacman::p_load(tidyverse, haven, table1, nnet, MASS, funModeling, brant, lmtest, multcomp, table1)
+
+mydata <- read_sas("D:/SAS/DATA Files/ADA/mydata.sas7bdat", 
+    NULL)
+View(mydata)
+summary(mydata)
+
+mydata_f <- mydata %>%
+  mutate(depress_cat = factor(
+            depress_cat, levels = c(1,2,3,4,5),
+            labels = c("No Depression","Mild Depression","Moderate Depression","Moderately Severe Depression","Severe Depression")),
+         depress_cat = relevel(depress_cat, ref = "No Depression"),
+         caff_cat = case_when(caff <= 27 ~ 1,
+                              caff > 27 & caff<= 96 ~ 2,
+                              caff > 96 & caff<= 191 ~ 3,
+                              caff > 191 ~ 4),
+         caff_cat = factor(
+            caff_cat, levels = c(1,2,3,4),
+            labels = c("Low Intake","Moderate Intake","Moderately High Intake","High Intake")),
+         caff_cat = relevel(caff_cat, ref = "Low Intake"),
+         caff_bi = case_when(caff <= 139 ~ 1, caff > 139 ~ 2),
+         caff_bi = factor(
+           caff_bi, levels = c(1,2), labels = c("< Average Intake","> Average Intake")),
+         caff_bi = relevel(caff_bi, ref = "< Average Intake"),
+         race_cat = factor(
+            race_cat,levels = c(1,2,3,4,5),
+            labels = c("Non-Hispanic White","Hispanic","Non-Hispanic Black","Non-Hispanic Asian","Other race")),
+         race_cat = relevel(race_cat, ref = "Non-Hispanic White"),
+         gender = factor(
+            gender, levels = c(1,2), labels = c("Male","Female")),
+         gender = relevel(gender, ref = "Male"),
+         age_cat = factor(
+            age_cat, levels = c(1,2,3),
+            labels = c("Aged 20-29","Aged 30-49","Aged 50-65")),
+         age_cat = relevel(age_cat, ref = "Aged 20-29"),
+         income_cat = factor(
+            income_cat, levels = c(1,2,3,4),
+            labels = c("< 50% of FPL","50%-129% of FPL","130%-250% of FPL","> 250% of FPL")),
+         income_cat = relevel(income_cat, ref = "< 50% of FPL"),
+         edu_cat = factor(
+            edu_cat, levels = c(1,2,3,4),
+            labels = c("Less than High School","High School","Some College","College")),
+         edu_cat = relevel(edu_cat, ref = "Less than High School")
+         )
+summary(mydata_f)
+View(mydata_f)
+
+```
+
+
+```{r}
+
+label(mydata_f$age)<-"Age (years)"
+label(mydata_f$gender)<-"Gender"
+label(mydata_f$race_cat)<-"Race"
+label(mydata_f$income_cat)<-"Income Level"
+label(mydata_f$edu_cat)<-"Education"
+label(mydata_f$depress_cat)<-"Depression Status"
+label(mydata_f$caff_bi)<-"Caffeine Intake (mg/day)"
+
+table1(~age + gender + race_cat + income_cat + edu_cat + depress_cat | caff_bi, overall="Total",rowlabelhead="Variable",footnote='SD = standard deviation',mydata_f)
+
+```
+
+
+```{r}
+mod_bi <- multinom(depress_cat ~ caff_bi, data = mydata_f)
+summary(mod_bi)
+
+exp(coef(mod_bi))
+
+exp(confint(mod_bi,level=0.95))
+```
+
+```{r}
+mod_bi_conf <- multinom(depress_cat ~ caff_bi + age_cat + income_cat + edu_cat, data = mydata_f)
+summary(mod_bi_conf)
+
+exp(coef(mod_bi_conf))
+
+exp(confint(mod_bi_conf,level=0.95))
+```
+
+
+```{r}
+## effect modification 
+
+# race
+mod_r <- multinom(depress_cat ~ caff_bi + race_cat, data = mydata_f)
+mod_rint <- multinom(depress_cat ~ caff_bi + race_cat + race_cat*caff_bi, data = mydata_f)
+
+lrtest(mod_r, mod_rint)
+
+# gender
+mod_g <- multinom(depress_cat ~ caff_bi + gender, data = mydata_f)
+mod_gint <- multinom(depress_cat ~ caff_bi + gender + gender*caff_bi, data = mydata_f)
+
+lrtest(mod_g, mod_gint)
+
+
+mod_rg <- multinom(depress_cat ~ caff_bi + race + gender + race*gender, data = mydata_f)
+mod_rgint <- multinom(depress_cat ~ caff_bi + race + gender + race*caff_bi + gender*caff_bi + race*gender*caff_bi, data = mydata_f)
+
+lrtest(mod_rg, mod_rgint)
+
+```
+
+```{r}
+# Stratify - w/0 confounders
+# Whites
+race_w <- multinom(depress_cat ~ caff_bi, data =  mydata_f[mydata_f$race_cat=="Non-Hispanic White",])
+summary(race_w)
+exp(coef(race_w))
+exp(confint(race_w,level=0.95))
+
+# Hispanic
+race_h <- multinom(depress_cat ~ caff_bi, data =  mydata_f[mydata_f$race_cat=="Hispanic",])
+summary(race_h)
+exp(coef(race_h))
+exp(confint(race_h,level=0.95))
+
+# Black
+race_b <- multinom(depress_cat ~ caff_bi, data =  mydata_f[mydata_f$race_cat=="Non-Hispanic Black",])
+summary(race_b)
+exp(coef(race_b))
+exp(confint(race_b,level=0.95))
+
+# Asian
+race_a <- multinom(depress_cat ~ caff_bi, data =  mydata_f[mydata_f$race_cat=="Non-Hispanic Asian",])
+summary(race_a)
+exp(coef(race_a))
+exp(confint(race_a,level=0.95))
+
+# Other
+race_o <- multinom(depress_cat ~ caff_bi, data =  mydata_f[mydata_f$race_cat=="Other race",])
+summary(race_o)
+exp(coef(race_o))
+exp(confint(race_o,level=0.95))
+```
+
+
+
+```{r}
+# Stratify - w/0 confounders
+# Whites
+race_w_c <- multinom(depress_cat ~ caff_bi + age_cat + income_cat + edu_cat, data =  mydata_f[mydata_f$race_cat=="Non-Hispanic White",])
+summary(race_w_c)
+exp(coef(race_w_c))
+exp(confint(race_w_c,level=0.95))
+
+# Hispanic
+race_h_c <- multinom(depress_cat ~ caff_bi + age_cat + income_cat + edu_cat, data =  mydata_f[mydata_f$race_cat=="Hispanic",])
+summary(race_h_c)
+exp(coef(race_h_c))
+exp(confint(race_h_c,level=0.95))
+
+# Black
+race_b_c <- multinom(depress_cat ~ caff_bi + age_cat + income_cat + edu_cat, data =  mydata_f[mydata_f$race_cat=="Non-Hispanic Black",])
+summary(race_b_c)
+exp(coef(race_b_c))
+exp(confint(race_b_c,level=0.95))
+
+# Asian
+race_a_c <- multinom(depress_cat ~ caff_bi + age_cat + income_cat + edu_cat, data =  mydata_f[mydata_f$race_cat=="Non-Hispanic Asian",])
+summary(race_a_c)
+exp(coef(race_a_c))
+exp(confint(race_a_c,level=0.95))
+
+# Other
+race_o_c <- multinom(depress_cat ~ caff_bi + age_cat + income_cat + edu_cat, data =  mydata_f[mydata_f$race_cat=="Other race",])
+summary(race_o_c)
+exp(coef(race_o_c))
+exp(confint(race_o_c,level=0.95))
+
+```
+
+
+```{r}
+# Stratify - w/o confounders
+# Male
+gender_m <- multinom(depress_cat ~ caff_bi, data =  mydata_f[mydata_f$gender=="Male",])
+summary(gender_m)
+
+exp(coef(gender_m))
+exp(confint(gender_m,level=0.95))
+
+# Female
+gender_fm <- multinom(depress_cat ~ caff_bi, data =  mydata_f[mydata_f$gender=="Female",])
+summary(gender_fm)
+
+exp(coef(gender_fm))
+exp(confint(gender_fm,level=0.95))
+```
+
+
+
+```{r}
+# Stratify - adjust for confounders
+# Male
+gender_m_c <- multinom(depress_cat ~ caff_bi + age_cat + income_cat + edu_cat, data =  mydata_f[mydata_f$gender=="Male",])
+summary(gender_m_c)
+
+exp(coef(gender_m_c))
+exp(confint(gender_m_c,level=0.95))
+
+# Female
+gender_fm_c <- multinom(depress_cat ~ caff_bi + age_cat + income_cat + edu_cat, data =  mydata_f[mydata_f$gender=="Female",])
+summary(gender_fm_c)
+
+exp(coef(gender_fm_c))
+exp(confint(gender_fm_c,level=0.95))
+```
+
